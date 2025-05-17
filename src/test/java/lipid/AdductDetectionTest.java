@@ -1,16 +1,14 @@
 package lipid;
 
+import adduct.Adduct;
+import adduct.MassTransformation;
 import org.junit.Before;
 import org.junit.Test;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
-import java.util.List;
 import java.util.Set;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertTrue;
 
 public class AdductDetectionTest {
     // !!TODO For the adduct detection both regular algorithms or drools can be used as far the tests are passed.
@@ -22,8 +20,24 @@ public class AdductDetectionTest {
     }
 
     @Test
-    public void shouldDetectAdductBasedOnMzDifference() {
+    public void testGetCharge() {
+        assertEquals(1, Adduct.getCharge("[M+H]+"));
+        assertEquals(2, Adduct.getCharge("[M+2H]2+"));
+        assertEquals(3, Adduct.getCharge("[M+3H]3+"));
+    }
 
+    @Test
+    public void testGetMonoisotopicMass() {
+        Double mz = 200.5;
+        String adduct = "[M+H]+";
+        Double expectedMass = 200.5-1.007276;
+
+        Double result = MassTransformation.getMonoisotopicMassFromMZ(mz, adduct, IonizationMode.POSITIVE);
+        assertEquals(expectedMass, result, 0.001);
+    }
+
+    @Test
+    public void shouldDetectAdductBasedOnMzDifference() {
         // Given two peaks with ~21.98 Da difference (e.g., [M+H]+ and [M+Na]+)
         Peak mH = new Peak(700.500, 100000.0); // [M+H]+
         Peak mNa = new Peak(722.482, 80000.0);  // [M+Na]+
@@ -32,13 +46,11 @@ public class AdductDetectionTest {
         double annotationMZ = 700.49999d;
         double annotationIntensity = 80000.0;
         double annotationRT = 6.5d;
-        Annotation annotation = new Annotation(lipid, annotationMZ, annotationIntensity, annotationRT, IoniationMode.POSITIVE, Set.of(mH, mNa));
+        Annotation annotation = new Annotation(lipid, annotationMZ, annotationIntensity, annotationRT, IonizationMode.POSITIVE, Set.of(mH, mNa));
 
-
-        // Then we should call the algorithmic/knowledge system rules fired to detect the adduct and Set it!
-        //
-        assertNotNull("[M+H]+ should be detected", annotation.getAdduct());
-        assertEquals( "Adduct inferred from lowest mz in group","[M+H]+", annotation.getAdduct());
+        // Then
+        assertNotNull("[M+H]+ should be detected", annotation.detectAdduct(IonizationMode.POSITIVE));
+        assertEquals( "Adduct inferred from lowest mz in group","[M+H]+", annotation.detectAdduct(IonizationMode.POSITIVE));
     }
 
 
@@ -48,13 +60,10 @@ public class AdductDetectionTest {
         Peak mhH2O = new Peak(682.4894, 70000.0);     // [M+H–H₂O]+, ~18.0106 Da less
 
         Lipid lipid = new Lipid(1, "PE 36:2", "C41H78NO8P", "PE", 36, 2);
-        Annotation annotation = new Annotation(lipid, mh.getMz(), mh.getIntensity(), 7.5d, IoniationMode.POSITIVE, Set.of(mh, mhH2O));
+        Annotation annotation = new Annotation(lipid, mh.getMz(), mh.getIntensity(), 7.5d, IonizationMode.POSITIVE, Set.of(mh, mhH2O));
 
-
-
-        assertNotNull("[M+H]+ should be detected", annotation.getAdduct());
-
-        assertEquals( "Adduct inferred from lowest mz in group","[M+H]+", annotation.getAdduct());
+        assertNotNull("[M+H]+ should be detected",   annotation.detectAdduct(IonizationMode.POSITIVE));
+        assertEquals( "Adduct inferred from lowest mz in group","[M+H]+",  annotation.detectAdduct(IonizationMode.POSITIVE));
     }
 
     @Test
@@ -65,11 +74,27 @@ public class AdductDetectionTest {
         Peak doublyCharged = new Peak(350.754, 85000.0);   // [M+2H]2+
 
         Lipid lipid = new Lipid(3, "TG 54:3", "C57H104O6", "TG", 54, 3);
-        Annotation annotation = new Annotation(lipid, singlyCharged.getMz(), singlyCharged.getIntensity(), 10d, IoniationMode.POSITIVE, Set.of(singlyCharged, doublyCharged));
+        Annotation annotation = new Annotation(lipid, singlyCharged.getMz(), singlyCharged.getIntensity(), 10d, IonizationMode.POSITIVE, Set.of(singlyCharged, doublyCharged));
 
-        assertNotNull("[M+H]+ should be detected", annotation.getAdduct());
+        assertNotNull("[M+H]+ should be detected",  annotation.detectAdduct(IonizationMode.POSITIVE));
+        assertEquals( "Adduct inferred from lowest mz in group","[M+H]+",  annotation.detectAdduct(IonizationMode.POSITIVE));
+    }
 
-        assertEquals( "Adduct inferred from lowest mz in group","[M+H]+", annotation.getAdduct());
+    @Test
+    public void shouldDetectDimerizationAndBaseMonomer() {
+        // Monómero [M+H]+ 700.500
+
+        Peak monomer = new Peak(700.500, 100000.0);
+        // Dímero [2M+H]+ 1400.993 (2*699.492724)-(-1.007276)=1399.993
+        Peak dimer = new Peak(1399.993, 50000.0);
+
+        Lipid lipid = new Lipid(5, "PC 34:2", "C42H80NO8P", "TG", 34, 2);
+
+        Annotation annotation = new Annotation(lipid, monomer.getMz(), monomer.getIntensity(), 7.2, IonizationMode.POSITIVE, Set.of(monomer, dimer));
+
+        // Verificamos que se detecta correctamente como [M+H]+ (el más pequeño)
+        assertNotNull("Debe detectar el aducto principal", annotation.detectAdduct(IonizationMode.POSITIVE));
+        assertEquals("Debe ser [M+H]+ como base", "[M+H]+", annotation.detectAdduct(IonizationMode.POSITIVE));
     }
 
 }

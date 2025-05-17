@@ -1,23 +1,23 @@
 package lipid;
 
-import java.util.Collections;
-import java.util.Objects;
-import java.util.Set;
-import java.util.TreeSet;
+import adduct.Adduct;
+import adduct.MassTransformation;
+
+
+import java.util.*;
 
 /**
  * Class to represent the annotation over a lipid
  */
 public class Annotation {
-
     private final Lipid lipid;
     private final double mz;
     private final double intensity; // intensity of the most abundant peak in the groupedPeaks
     private final double rtMin;
-    private final IoniationMode ionizationMode;
+    private final IonizationMode ionizationMode;
     private String adduct; // !!TODO The adduct will be detected based on the groupedSignals
     private final Set<Peak> groupedSignals;
-    private int score;
+    private double score;
     private int totalScoresApplied;
 
 
@@ -28,7 +28,7 @@ public class Annotation {
      * @param retentionTime
      * @param ionizationMode
      */
-    public Annotation(Lipid lipid, double mz, double intensity, double retentionTime, IoniationMode ionizationMode) {
+    public Annotation(Lipid lipid, double mz, double intensity, double retentionTime, IonizationMode ionizationMode) {
         this(lipid, mz, intensity, retentionTime, ionizationMode, Collections.emptySet());
     }
 
@@ -40,7 +40,7 @@ public class Annotation {
      * @param ionizationMode
      * @param groupedSignals
      */
-    public Annotation(Lipid lipid, double mz, double intensity, double retentionTime, IoniationMode ionizationMode, Set<Peak> groupedSignals) {
+    public Annotation(Lipid lipid, double mz, double intensity, double retentionTime, IonizationMode ionizationMode, Set<Peak> groupedSignals) {
         this.lipid = lipid;
         this.mz = mz;
         this.rtMin = retentionTime;
@@ -76,7 +76,7 @@ public class Annotation {
         return intensity;
     }
 
-    public IoniationMode getIonizationMode() {
+    public IonizationMode getIonizationMode() {
         return ionizationMode;
     }
 
@@ -85,16 +85,16 @@ public class Annotation {
     }
 
 
-    public int getScore() {
+    public double getScore() {
         return score;
     }
 
-    public void setScore(int score) {
+    public void setScore(double score) {
         this.score = score;
     }
 
     // !CHECK Take into account that the score should be normalized between -1 and 1
-    public void addScore(int delta) {
+    public void addScore(double delta) {
         this.score += delta;
         this.totalScoresApplied++;
     }
@@ -109,24 +109,65 @@ public class Annotation {
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) return true;
-        if (!(o instanceof Annotation)) return false;
+        if (o == null || getClass() != o.getClass()) return false;
         Annotation that = (Annotation) o;
-        return Double.compare(that.mz, mz) == 0 &&
-                Double.compare(that.rtMin, rtMin) == 0 &&
-                Objects.equals(lipid, that.lipid);
+        return Double.compare(mz, that.mz) == 0 && Double.compare(intensity, that.intensity) == 0 && Double.compare(rtMin, that.rtMin) == 0 && Double.compare(score, that.score) == 0 && totalScoresApplied == that.totalScoresApplied && Objects.equals(lipid, that.lipid) && ionizationMode == that.ionizationMode && Objects.equals(adduct, that.adduct) && Objects.equals(groupedSignals, that.groupedSignals);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(lipid, mz, rtMin);
+        return Objects.hash(lipid, mz, intensity, rtMin, ionizationMode, adduct, groupedSignals, score, totalScoresApplied);
     }
 
     @Override
     public String toString() {
-        return String.format("Annotation(%s, mz=%.4f, RT=%.2f, adduct=%s, intensity=%.1f, score=%d)",
+        return String.format("Annotation(%s, mz=%.4f, RT=%.2f, adduct=%s, intensity=%.1f, score=%.2f)",
                 lipid.getName(), mz, rtMin, adduct, intensity, score);
     }
 
-    // !!TODO Detect the adduct with an algorithm or with drools, up to the user.
+    public String detectAdduct(IonizationMode ionizationMode) {
+        final double TOLERANCE_PPM = 10.0;
+
+        Peak closestPeak = null;
+        double closestMzDiff = Double.MAX_VALUE;
+
+        for (Peak p : groupedSignals) {
+            double diffMz = Math.abs(p.getMz() - this.mz);
+            if (diffMz < closestMzDiff) {
+                closestMzDiff = diffMz;
+                closestPeak = p;
+            }
+        }
+
+        Map<String, Double> map = Adduct.getAdductMapByIonizationMode(ionizationMode);
+
+        if (closestPeak != null) {
+            double peakMz = closestPeak.getMz();
+
+            for (Map.Entry<String, Double> entry : map.entrySet()) {
+                String adductName = entry.getKey();
+                double adductMass = entry.getValue();
+
+                int charge = Adduct.getCharge(adductName);
+                int multimer = Adduct.getMultimer(adductName);
+
+                try {
+                    double monoMass = MassTransformation.getMonoisotopicMassFromMZ(peakMz, adductName, ionizationMode);
+                    double expectedMz = MassTransformation.getMzFromMonoisotopicMass(monoMass, adductName, ionizationMode);
+
+                    double ppmError = Math.abs((expectedMz - this.mz) / this.mz) * 1_000_000;
+                    if (ppmError <= TOLERANCE_PPM) {
+                        this.adduct = adductName;
+                        return adductName;
+                    }
+                } catch (IllegalArgumentException e) {
+                    // skip invalid charge/multimer combinations
+                    continue;
+                }
+            }
+        }
+
+        return "No Peak match with AdductList";
+    }
+
 }
