@@ -6,7 +6,7 @@ public class Lipid {
     private final int compoundId;
     private final String name;
     private final String formula;
-    private final String lipidType; // !! OPTIONAL TODO -> TRANSFORM INTO AN ENUMERATION
+    private final String lipidType;
     private final int carbonCount;
     private final int doubleBondsCount;
 
@@ -54,14 +54,14 @@ public class Lipid {
 
     @Override
     public boolean equals(Object o) {
-        if (!(o instanceof Lipid)) return false;
+        if (o == null || getClass() != o.getClass()) return false;
         Lipid lipid = (Lipid) o;
-        return compoundId == lipid.compoundId;
+        return compoundId == lipid.compoundId && carbonCount == lipid.carbonCount && doubleBondsCount == lipid.doubleBondsCount && Objects.equals(name, lipid.name) && Objects.equals(formula, lipid.formula) && Objects.equals(lipidType, lipid.lipidType);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hashCode(compoundId);
+        return Objects.hash(compoundId, name, formula, lipidType, carbonCount, doubleBondsCount);
     }
 
     @Override

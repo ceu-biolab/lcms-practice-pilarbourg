@@ -1,0 +1,12 @@
+lipid/LipidTypePriorityOrder.class
+dss/MeasurementUnit.class
+main/Main.class
+lipid/IonizationMode.class
+adduct/Adduct.class
+lipid/Lipid.class
+adduct/AdductList.class
+lipid/Peak.class
+lipid/LipidScoreUnit.class
+lipid/Annotation.class
+dss/Measurement.class
+adduct/MassTransformation.class
